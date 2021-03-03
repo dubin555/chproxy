@@ -5,6 +5,8 @@
 # chproxy
 
 [English](README.md) | [简体中文](README-CN.md)
+Change after I fork this repo?
+- Remove the cache related part, because it is not always useful: 1. Usually you need deploy your chproxy distributed, the cache will miss 2. need to write to local disk, not sure it is fast 3. I think the cache should be done in the client side, let the client decide which query to cache, which is not 
 
 Chproxy, is an http proxy and load balancer for [ClickHouse](https://ClickHouse.yandex) database. It provides the following features:
 
