@@ -11,4 +11,7 @@ users:
 # by default each cluster has `default` user which can be overridden by section `users`
 clusters:
   - name: "default"
-    nodes: ["127.0.0.1:8123"]
+    nodes: ["10.29.42.196:8123"]
+    users:
+      - name: "default"
+        password: "12345"

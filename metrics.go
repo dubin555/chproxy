@@ -87,34 +87,6 @@ var (
 		},
 		[]string{"user", "cluster", "cluster_user", "replica", "cluster_node"},
 	)
-	cacheHit = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "cache_hits_total",
-			Help: "The amount of cache hits",
-		},
-		[]string{"cache", "user", "cluster", "cluster_user"},
-	)
-	cacheMiss = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "cache_miss_total",
-			Help: "The amount of cache misses",
-		},
-		[]string{"cache", "user", "cluster", "cluster_user"},
-	)
-	cacheSize = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "cache_size",
-			Help: "Cache size at the current time",
-		},
-		[]string{"cache"},
-	)
-	cacheItems = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "cache_items",
-			Help: "Cache items at the current time",
-		},
-		[]string{"cache"},
-	)
 	requestDuration = prometheus.NewSummaryVec(
 		prometheus.SummaryOpts{
 			Name:       "request_duration_seconds",
@@ -179,7 +151,6 @@ func init() {
 		limitExcess, hostPenalties, hostHealth, concurrentQueries,
 		requestQueueSize, userQueueOverflow, clusterUserQueueOverflow,
 		requestBodyBytes, responseBodyBytes,
-		cacheHit, cacheMiss, cacheSize, cacheItems,
 		requestDuration, proxiedResponseDuration, cachedResponseDuration,
 		canceledRequest, timeoutRequest,
 		configSuccess, configSuccessTime, badRequest)

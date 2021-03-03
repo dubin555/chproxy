@@ -10,8 +10,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Vertamedia/chproxy/chdecompressor"
-	"github.com/Vertamedia/chproxy/log"
+	"github.com/dubin555/chproxy/chdecompressor"
+	"github.com/dubin555/chproxy/log"
 )
 
 func respondWith(rw http.ResponseWriter, err error, status int) {

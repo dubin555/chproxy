@@ -5,14 +5,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httputil"
-	"net/url"
+	//"net/url"
 	"strconv"
 	"sync"
 	"time"
 
-	"github.com/Vertamedia/chproxy/cache"
-	"github.com/Vertamedia/chproxy/config"
-	"github.com/Vertamedia/chproxy/log"
+	"github.com/dubin555/chproxy/config"
+	"github.com/dubin555/chproxy/log"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -32,7 +31,7 @@ type reverseProxy struct {
 
 	users    map[string]*user
 	clusters map[string]*cluster
-	caches   map[string]*cache.Cache
+	//caches   map[string]*cache.Cache
 }
 
 func newReverseProxy() *reverseProxy {
@@ -93,18 +92,14 @@ func (rp *reverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	req, origParams := s.decorateRequest(req)
 
+	fmt.Print(origParams)
 	// wrap body into cachedReadCloser, so we could obtain the original
 	// request on error.
 	req.Body = &cachedReadCloser{
 		ReadCloser: req.Body,
 	}
 
-	if s.user.cache == nil {
-		rp.proxyRequest(s, srw, srw, req)
-	} else {
-		rp.serveFromCache(s, srw, req, origParams)
-	}
-
+	rp.proxyRequest(s, srw, srw, req)
 	// It is safe calling getQuerySnippet here, since the request
 	// has been already read in proxyRequest or serveFromCache.
 	q := getQuerySnippet(req)
@@ -177,12 +172,6 @@ func (rp *reverseProxy) proxyRequest(s *scope, rw http.ResponseWriter, srw *stat
 		since := float64(time.Since(startTime).Seconds())
 		proxiedResponseDuration.With(s.labels).Observe(since)
 
-		// cache.ResponseWriter pushes status code to srw on Commit/Rollback actions
-		// but they didn't happen yet, so manually propagate the status code from crw to srw.
-		if crw, ok := rw.(*cache.ResponseWriter); ok {
-			srw.statusCode = crw.StatusCode()
-		}
-
 		// StatusBadGateway response is returned by http.ReverseProxy when
 		// it cannot establish connection to remote host.
 		if srw.statusCode == http.StatusBadGateway {
@@ -222,100 +211,7 @@ func (rp *reverseProxy) proxyRequest(s *scope, rw http.ResponseWriter, srw *stat
 	}
 }
 
-func (rp *reverseProxy) serveFromCache(s *scope, srw *statResponseWriter, req *http.Request, origParams url.Values) {
-	noCache := origParams.Get("no_cache")
-	if noCache == "1" || noCache == "true" {
-		// The response caching is disabled.
-		rp.proxyRequest(s, srw, srw, req)
-		return
-	}
 
-	q, err := getFullQuery(req)
-	if err != nil {
-		err = fmt.Errorf("%s: cannot read query: %s", s, err)
-		respondWith(srw, err, http.StatusBadRequest)
-		return
-	}
-	if !canCacheQuery(q) {
-		// The query cannot be cached, so just proxy it.
-		rp.proxyRequest(s, srw, srw, req)
-		return
-	}
-
-	// Do not store `replica` and `cluster_node` in labels, since they have
-	// no sense for cache metrics.
-	labels := prometheus.Labels{
-		"cache":        s.user.cache.Name,
-		"user":         s.labels["user"],
-		"cluster":      s.labels["cluster"],
-		"cluster_user": s.labels["cluster_user"],
-	}
-
-	var paramsHash uint32
-	if s.user.params != nil {
-		paramsHash = s.user.params.key
-	}
-	key := &cache.Key{
-		Query: skipLeadingComments(q),
-		// sort `Accept-Encoding` header to get the same combination for different browsers
-		AcceptEncoding:        sortHeader(req.Header.Get("Accept-Encoding")),
-		DefaultFormat:         origParams.Get("default_format"),
-		Database:              origParams.Get("database"),
-		Compress:              origParams.Get("compress"),
-		EnableHTTPCompression: origParams.Get("enable_http_compression"),
-		Namespace:             origParams.Get("cache_namespace"),
-		Extremes:              origParams.Get("extremes"),
-		MaxResultRows:         origParams.Get("max_result_rows"),
-		ResultOverflowMode:    origParams.Get("result_overflow_mode"),
-		UserParamsHash:        paramsHash,
-	}
-
-	startTime := time.Now()
-	err = s.user.cache.WriteTo(srw, key)
-	if err == nil {
-		// The response has been successfully served from cache.
-		cacheHit.With(labels).Inc()
-		since := float64(time.Since(startTime).Seconds())
-		cachedResponseDuration.With(labels).Observe(since)
-		log.Debugf("%s: cache hit", s)
-		return
-	}
-	if err != cache.ErrMissing {
-		// Unexpected error while serving the response.
-		err = fmt.Errorf("%s: %s; query: %q", s, err, q)
-		respondWith(srw, err, http.StatusInternalServerError)
-		return
-	}
-
-	// The response wasn't found in the cache.
-	// Request it from clickhouse.
-	cacheMiss.With(labels).Inc()
-	log.Debugf("%s: cache miss", s)
-	crw, err := s.user.cache.NewResponseWriter(srw, key)
-	if err != nil {
-		err = fmt.Errorf("%s: %s; query: %q", s, err, q)
-		respondWith(srw, err, http.StatusInternalServerError)
-		return
-	}
-	rp.proxyRequest(s, crw, srw, req)
-
-	if crw.StatusCode() != http.StatusOK || s.canceled {
-		// Do not cache non-200 or cancelled responses.
-		// Restore the original status code by proxyRequest if it was set.
-		if srw.statusCode != 0 {
-			crw.WriteHeader(srw.statusCode)
-		}
-		err = crw.Rollback()
-	} else {
-		err = crw.Commit()
-	}
-
-	if err != nil {
-		err = fmt.Errorf("%s: %s; query: %q", s, err, q)
-		respondWith(srw, err, http.StatusInternalServerError)
-		return
-	}
-}
 
 // applyConfig applies the given cfg to reverseProxy.
 //
@@ -333,28 +229,6 @@ func (rp *reverseProxy) applyConfig(cfg *config.Config) error {
 		return err
 	}
 
-	caches := make(map[string]*cache.Cache, len(cfg.Caches))
-	defer func() {
-		// caches is swapped with old caches from rp.caches
-		// on successful config reload - see the end of reloadConfig.
-		for _, tmpCache := range caches {
-			// Speed up applyConfig by closing caches in background,
-			// since the process of cache closing may be lengthy
-			// due to cleaning.
-			go tmpCache.Close()
-		}
-	}()
-	for _, cc := range cfg.Caches {
-		if _, ok := caches[cc.Name]; ok {
-			return fmt.Errorf("duplicate config for cache %q", cc.Name)
-		}
-		tmpCache, err := cache.New(cc)
-		if err != nil {
-			return fmt.Errorf("cannot initialize cache %q: %s", cc.Name, err)
-		}
-		caches[cc.Name] = tmpCache
-	}
-
 	params := make(map[string]*paramsRegistry, len(cfg.ParamGroups))
 	for _, p := range cfg.ParamGroups {
 		if _, ok := params[p.Name]; ok {
@@ -369,7 +243,7 @@ func (rp *reverseProxy) applyConfig(cfg *config.Config) error {
 	profile := &usersProfile{
 		cfg:      cfg.Users,
 		clusters: clusters,
-		caches:   caches,
+		//caches:   caches,
 		params:   params,
 	}
 	users, err := profile.newUsers()
@@ -391,8 +265,6 @@ func (rp *reverseProxy) applyConfig(cfg *config.Config) error {
 	// Gauge metrics may become irrelevant if they may freeze at non-zero
 	// value after config reload.
 	hostHealth.Reset()
-	cacheSize.Reset()
-	cacheItems.Reset()
 
 	// Start service goroutines with new configs.
 	for _, c := range clusters {
@@ -429,25 +301,10 @@ func (rp *reverseProxy) applyConfig(cfg *config.Config) error {
 	rp.users = users
 	// Swap is needed for deferred closing of old caches.
 	// See the code above where new caches are created.
-	caches, rp.caches = rp.caches, caches
+	//caches, rp.caches = rp.caches, caches
 	rp.lock.Unlock()
 
 	return nil
-}
-
-// refreshCacheMetrics refresehs cacheSize and cacheItems metrics.
-func (rp *reverseProxy) refreshCacheMetrics() {
-	rp.lock.RLock()
-	defer rp.lock.RUnlock()
-
-	for _, c := range rp.caches {
-		stats := c.Stats()
-		labels := prometheus.Labels{
-			"cache": c.Name,
-		}
-		cacheSize.With(labels).Set(float64(stats.Size))
-		cacheItems.With(labels).Set(float64(stats.Items))
-	}
 }
 
 func (rp *reverseProxy) getScope(req *http.Request) (*scope, int, error) {

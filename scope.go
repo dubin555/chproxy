@@ -13,9 +13,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Vertamedia/chproxy/cache"
-	"github.com/Vertamedia/chproxy/config"
-	"github.com/Vertamedia/chproxy/log"
+	"github.com/dubin555/chproxy/config"
+	"github.com/dubin555/chproxy/log"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -447,14 +446,14 @@ type user struct {
 	denyHTTPS bool
 	allowCORS bool
 
-	cache  *cache.Cache
+	//cache  *cache.Cache
 	params *paramsRegistry
 }
 
 type usersProfile struct {
 	cfg      []config.User
 	clusters map[string]*cluster
-	caches   map[string]*cache.Cache
+	//caches   map[string]*cache.Cache
 	params   map[string]*paramsRegistry
 }
 
@@ -487,14 +486,6 @@ func (up usersProfile) newUser(u config.User) (*user, error) {
 		queueCh = make(chan struct{}, u.MaxQueueSize)
 	}
 
-	var cc *cache.Cache
-	if len(u.Cache) > 0 {
-		cc = up.caches[u.Cache]
-		if cc == nil {
-			return nil, fmt.Errorf("unknown `cache` %q", u.Cache)
-		}
-	}
-
 	var params *paramsRegistry
 	if len(u.Params) > 0 {
 		params = up.params[u.Params]
@@ -517,7 +508,6 @@ func (up usersProfile) newUser(u config.User) (*user, error) {
 		denyHTTP:             u.DenyHTTP,
 		denyHTTPS:            u.DenyHTTPS,
 		allowCORS:            u.AllowCORS,
-		cache:                cc,
 		params:               params,
 	}, nil
 }

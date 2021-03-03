@@ -14,8 +14,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Vertamedia/chproxy/config"
-	"github.com/Vertamedia/chproxy/log"
+	"github.com/dubin555/chproxy/config"
+	"github.com/dubin555/chproxy/log"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/crypto/acme/autocert"
 )
@@ -221,7 +221,7 @@ func serveHTTP(rw http.ResponseWriter, r *http.Request) {
 			respondWith(rw, err, http.StatusForbidden)
 			return
 		}
-		proxy.refreshCacheMetrics()
+		//proxy.refreshCacheMetrics()
 		promHandler.ServeHTTP(rw, r)
 	case "/", "/query":
 		var err error
