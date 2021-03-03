@@ -6,6 +6,9 @@
 
 [English](README.md) | [简体中文](README-CN.md)
 
+Fork 之后有什么改动？
+* 把Cache相关的部分去掉，因为个人觉得不是那么重要： 1 即使使用chproxy， 上面也要进行分布式部署， 按照现有逻辑， 缓存将失效。 2 缓存需要写入本地文件， 并且清除缓存时 需要频繁的加锁 遍历文件， 不确定效率怎么样 3 个人认为cache应该在客户端完成，客户端来决定要不要cache
+
  Chproxy 是一个用于 [ClickHouse](https://clickhouse.tech) 数据库的 http 代理、负载均衡器。具有以下特性：
 
 * 支持根据输入用户代理请求到多个 `ClickHouse` 集群。比如，把来自 `appserver` 的用户请求代理到 `stats-raw`  集群，把来自 `reportserver` 用户的请求代理到 `stats-aggregate` 集群。
